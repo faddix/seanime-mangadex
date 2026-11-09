@@ -44,7 +44,7 @@ type MangadexChapterAttributes = {
 // DEVNOTE: Each chapter ID is a unique string provided by Mangadex
 
 class Provider {
-    private url = "https://api.mangadex.org";
+    private url = ($getUserPreference("apiURL") || "https://api.mangadex.org");
     private baseUrl = "https://uploads.mangadex.org";
 
     private headers = {
