@@ -1,0 +1,25 @@
+{
+    "id": "mangadex",
+    "name": "MangaDex",
+    "version": "1.0.0",
+    "language": "typescript",
+    "type": "manga-provider",
+    "description": "Integrates MangaDex as a manga provider for Seanime.",
+    "author": "Faddix",
+    "icon": "https://raw.githubusercontent.com/faddix/seanime-mangadex/main/src/mangadex-logo.png",
+    "lang": "multi",
+    "userConfig": {
+        "version": 1,
+        "requiresConfig": false,
+        "fields": [
+            {
+                "type": "text",
+                "name": "apiURL",
+                "label": "MangaDex API URL",
+                "default": "https://api.mangadex.org"
+            }
+        ]
+    },
+    "payloadURI": "https://raw.githubusercontent.com/faddix/seanime-mangadex/main/mangadex.ts",
+    "manifestURI": "https://raw.githubusercontent.com/faddix/seanime-mangadex/main/mangadex.json"
+}
