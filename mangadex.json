@@ -1,7 +1,7 @@
 {
     "id": "mangadex",
     "name": "MangaDex",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "language": "typescript",
     "type": "manga-provider",
     "description": "Integrates MangaDex as a manga provider for Seanime.",
@@ -9,7 +9,7 @@
     "icon": "https://raw.githubusercontent.com/faddix/seanime-mangadex/main/src/mangadex-logo.png",
     "lang": "multi",
     "userConfig": {
-        "version": 1,
+        "version": 2,
         "requiresConfig": false,
         "fields": [
             {
@@ -17,6 +17,12 @@
                 "name": "apiURL",
                 "label": "MangaDex API URL",
                 "default": "https://api.mangadex.org"
+            },
+            {
+                "type": "switch",
+                "name": "includeAdultContent",
+                "label": "Include adult content",
+                "default": "true"
             }
         ]
     },

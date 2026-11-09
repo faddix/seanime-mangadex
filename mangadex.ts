@@ -53,202 +53,222 @@ class Provider {
 
     getSettings(): Settings {
         return {
-            supportsMultiScanlator: false,
-            supportsMultiLanguage: false,
+            supportsMultiScanlator: true,
+            supportsMultiLanguage: true,
         };
     }
 
-    async search(opts: QueryOptions): Promise<SearchResult[]> {
-        const ret: SearchResult[] = [];
-        const retManga: MangadexManga[] = [];
+    private getContentRatingParams(): string {
+        const ratings = ["safe", "suggestive"];
 
-        for (let i = 0; i < 1; i++) {
-            const resp = await fetch(
-                `${this.url}/manga?title=${encodeURIComponent(opts.query)}&limit=25&offset=${25 * i}&order[relevance]=desc&contentRating[]=safe&contentRating[]=suggestive&includes[]=cover_art`,
-                {
-                    headers: this.headers,
-                },
-            );
-
-            if (!resp.ok) {
-                console.error("mangadex: request failed", {
-                    status: resp.status,
-                });
-                throw new Error(
-                    `failed to decode response: status ${resp.status}`,
-                );
-            }
-
-            const data: { data: MangadexManga[] } = await resp.json();
-
-            retManga.push(...data.data);
+        if ($getUserPreference("includeAdultContent") !== "false") {
+            ratings.push("erotica", "pornographic");
         }
 
-        for (let manga of retManga) {
-            const altTitles: string[] = [];
+        return ratings
+            .map((rating) => `contentRating[]=${rating}`)
+            .join("&");
+    }
 
-            for (let title of manga.attributes.altTitles) {
-                if ("en" in title) altTitles.push(title["en"]);
-                if ("jp" in title) altTitles.push(title["jp"]);
-                if ("ja" in title) altTitles.push(title["ja"]);
+    async search(opts: QueryOptions): Promise<SearchResult[]> {
+        try {
+            const ret: SearchResult[] = [];
+            const retManga: MangadexManga[] = [];
+
+            console.log(`MangaDex: Searching for "${opts.query}"`);
+
+            for (let i = 0; i < 1; i++) {
+                const resp = await fetch(
+                    `${this.url}/manga?title=${encodeURIComponent(opts.query)}&limit=25&offset=${25 * i}&order[relevance]=desc&${this.getContentRatingParams()}&includes[]=cover_art`,
+                    {
+                        headers: this.headers,
+                    },
+                );
+
+                if (!resp.ok) {
+                    throw new Error(
+                        `failed to decode response: status ${resp.status}`,
+                    );
+                }
+
+                const data: { data: MangadexManga[] } = await resp.json();
+
+                retManga.push(...data.data);
             }
 
-            const t = getTitle(manga.attributes);
+            for (let manga of retManga) {
+                const altTitles: string[] = [];
 
-            let img: string;
+                for (let title of manga.attributes.altTitles) {
+                    if ("en" in title) altTitles.push(title["en"]);
+                    if ("jp" in title) altTitles.push(title["jp"]);
+                    if ("ja" in title) altTitles.push(title["ja"]);
+                }
 
-            for (let relation of manga.relationships) {
-                if (relation.type == "cover_art") {
-                    if ("fileName" in relation.attributes) {
-                        img = `${this.baseUrl}/covers/${manga.id}/${relation.attributes["fileName"]}.512.jpg`;
+                const t = getTitle(manga.attributes);
+
+                let img: string;
+
+                for (let relation of manga.relationships) {
+                    if (relation.type == "cover_art") {
+                        if ("fileName" in relation.attributes) {
+                            img = `${this.baseUrl}/covers/${manga.id}/${relation.attributes["fileName"]}.512.jpg`;
+                        }
                     }
                 }
+
+                let format = manga.type.toUpperCase();
+
+                if (format == "ADAPTATION") {
+                    format = "MANGA";
+                }
+
+                const result: SearchResult = {
+                    id: manga.id,
+                    title: t,
+                    synonyms: altTitles,
+                    image: img!,
+                    imageHeaders: {
+                        Referer: "https://mangadex.org/",
+                    },
+                    year: manga.attributes.year,
+                };
+
+                ret.push(result);
             }
 
-            let format = manga.type.toUpperCase();
-
-            if (format == "ADAPTATION") {
-                format = "MANGA";
-            }
-
-            const result: SearchResult = {
-                id: manga.id,
-                title: t,
-                synonyms: altTitles,
-                image: img!,
-                imageHeaders: {
-                    Referer: "https://mangadex.org/",
-                },
-                year: manga.attributes.year,
-            };
-
-            ret.push(result);
+            console.log(`MangaDex: Found ${ret.length} manga`);
+            return ret;
+        } catch (error) {
+            const e = error as Error;
+            console.error("MangaDex: Error searching: " + e.message);
+            throw e;
         }
-
-        return ret;
     }
 
     async findChapters(id: string): Promise<ChapterDetails[]> {
-        const ret: ChapterDetails[] = [];
+        try {
+            const ret: ChapterDetails[] = [];
 
-        console.debug("mangadex: Finding chapters", { mangaId: id });
+            console.log(`MangaDex: Finding chapters for manga ${id}`);
 
-        for (let page = 0; page <= 1; page++) {
+            for (let page = 0; page <= 1; page++) {
+                const resp = await fetch(
+                    `${this.url}/manga/${id}/feed?limit=500&translatedLanguage[]=en&includes[]=scanlation_group&includes[]=user&order[volume]=desc&order[chapter]=desc&offset=${500 * page}&${this.getContentRatingParams()}`,
+                    {
+                        headers: this.headers,
+                    },
+                );
+
+                if (!resp.ok) {
+                    throw new Error(
+                        `failed to decode response: status ${resp.status}`,
+                    );
+                }
+
+                const data: {
+                    result: string;
+                    errors: MangadexErrorResponse[];
+                    data: MangadexChapterData[];
+                } = await resp.json();
+
+                if (data.result == "error") {
+                    throw new Error(
+                        `could not find chapters: ${data.errors[0].detail}`,
+                    );
+                }
+
+                data.data.reverse();
+
+                const chapterMap: Record<string, ChapterDetails> = {};
+                let idx = ret.length;
+
+                for (let chapter of data.data) {
+                    if (chapter.attributes.chapter == "") continue;
+
+                    const title = `Chapter ${chapter.attributes.chapter} `;
+
+                    if (chapter.attributes.chapter in chapterMap) continue;
+
+                    chapterMap[chapter.attributes.chapter] = {
+                        id: chapter.id,
+                        url: "",
+                        title: title,
+                        index: idx,
+                        chapter: chapter.attributes.chapter,
+                        updatedAt: chapter.attributes.updatedAt,
+                    };
+
+                    idx++;
+                }
+
+                const chapters: ChapterDetails[] = [];
+
+                for (let chapter of Object.values(chapterMap)) {
+                    chapters.push(chapter);
+                }
+
+                chapters.sort((a, b) => a.index - b.index);
+
+                if (chapters.length > 0) ret.push(...chapters);
+                else break;
+            }
+
+            console.log(`MangaDex: Found ${ret.length} chapters`);
+            return ret;
+        } catch (error) {
+            const e = error as Error;
+            console.error("MangaDex: Error finding chapters: " + e.message);
+            throw e;
+        }
+    }
+
+    async findChapterPages(id: string): Promise<ChapterPage[]> {
+        try {
+            const ret: ChapterPage[] = [];
+
+            console.log(`MangaDex: Finding pages for chapter ${id}`);
+
             const resp = await fetch(
-                `${this.url}/manga/${id}/feed?limit=500&translatedLanguage[]=en&includes[]=scanlation_group&includes[]=user&order[volume]=desc&order[chapter]=desc&offset=${500 * page}&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic`,
+                `${this.url}/at-home/server/${id}`,
                 {
                     headers: this.headers,
                 },
             );
 
             if (!resp.ok) {
-                console.error("mangadex: Request failed", {
-                    status: resp.status,
-                });
                 throw new Error(
                     `failed to decode response: status ${resp.status}`,
                 );
             }
 
             const data: {
-                result: string;
-                errors: MangadexErrorResponse[];
-                data: MangadexChapterData[];
+                baseUrl: string;
+                chapter: {
+                    hash: string;
+                    data: string[];
+                };
             } = await resp.json();
 
-            if (data.result == "error") {
-                console.error("mangadex: Could not find chapters", {
-                    error: data.errors[0].title,
-                    detail: data.errors[0].detail,
+            for (let i = 0; i < data.chapter.data.length; i++) {
+                const page = data.chapter.data[i];
+
+                ret.push({
+                    url: `${data.baseUrl}/data/${data.chapter.hash}/${page}`,
+                    index: i,
+                    headers: {
+                        Referer: "https://mangadex.org",
+                    },
                 });
-                throw new Error(
-                    `could not find chapters: ${data.errors[0].detail}`,
-                );
             }
 
-            data.data.reverse();
-
-            const chapterMap: Record<string, ChapterDetails> = {};
-            let idx = ret.length;
-
-            for (let chapter of data.data) {
-                if (chapter.attributes.chapter == "") continue;
-
-                const title = `Chapter ${chapter.attributes.chapter} `;
-
-                if (chapter.attributes.chapter in chapterMap) continue;
-
-                chapterMap[chapter.attributes.chapter] = {
-                    id: chapter.id,
-                    url: "",
-                    title: title,
-                    index: idx,
-                    chapter: chapter.attributes.chapter,
-                    updatedAt: chapter.attributes.updatedAt,
-                };
-
-                idx++;
-            }
-
-            const chapters: ChapterDetails[] = [];
-
-            for (let chapter of Object.values(chapterMap)) {
-                chapters.push(chapter);
-            }
-
-            chapters.sort((a, b) => a.index - b.index);
-
-            if (chapters.length > 0) ret.push(...chapters);
-            else break;
+            console.log(`MangaDex: Found ${ret.length} pages`);
+            return ret;
+        } catch (error) {
+            const e = error as Error;
+            console.error("MangaDex: Error finding chapter pages: " + e.message);
+            throw e;
         }
-
-        return ret;
-    }
-
-    async findChapterPages(id: string): Promise<ChapterPage[]> {
-        const ret: ChapterPage[] = [];
-
-        console.debug("mangadex: Finding chapter pages", {
-            chapterId: id,
-        });
-
-        const resp = await fetch(
-            `${this.url}/at-home/server/${id}`,
-            {
-                headers: this.headers,
-            },
-        );
-
-        if (!resp.ok) {
-            console.error("mangadex: Request failed", {
-                status: resp.status,
-            });
-            throw new Error(
-                `failed to decode response: status ${resp.status}`,
-            );
-        }
-
-        const data: {
-            baseUrl: string;
-            chapter: {
-                hash: string;
-                data: string[];
-            };
-        } = await resp.json();
-
-        for (let i = 0; i < data.chapter.data.length; i++) {
-            const page = data.chapter.data[i];
-
-            ret.push({
-                url: `${data.baseUrl}/data/${data.chapter.hash}/${page}`,
-                index: i,
-                headers: {
-                    Referer: "https://mangadex.org",
-                },
-            });
-        }
-
-        return ret;
     }
 }
 
