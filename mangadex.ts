@@ -32,6 +32,15 @@ type MangadexErrorResponse = {
 type MangadexChapterData = {
     id: string;
     attributes: MangadexChapterAttributes;
+    relationships?: MangadexChapterRelationship[];
+};
+
+type MangadexChapterRelationship = {
+    id: string;
+    type: string;
+    attributes?: {
+        name?: string;
+    };
 };
 
 type MangadexChapterAttributes = {
@@ -39,6 +48,9 @@ type MangadexChapterAttributes = {
     volume: string;
     chapter: string;
     updatedAt: string;
+    translatedLanguage: string;
+    pages: number;
+    externalUrl?: string | null;
 };
 
 // DEVNOTE: Each chapter ID is a unique string provided by Mangadex
@@ -78,6 +90,7 @@ class Provider {
             console.log(`MangaDex: Searching for "${opts.query}"`);
 
             for (let i = 0; i < 1; i++) {
+                // console.log(`MangaDex: Link: ${this.url}/manga?title=${encodeURIComponent(opts.query)}&limit=25&offset=${25 * i}&order[relevance]=desc&${this.getContentRatingParams()}&includes[]=cover_art`);
                 const resp = await fetch(
                     `${this.url}/manga?title=${encodeURIComponent(opts.query)}&limit=25&offset=${25 * i}&order[relevance]=desc&${this.getContentRatingParams()}&includes[]=cover_art`,
                     {
@@ -152,9 +165,10 @@ class Provider {
 
             console.log(`MangaDex: Finding chapters for manga ${id}`);
 
-            for (let page = 0; page <= 1; page++) {
+            for (let offset = 0; ; offset += 500) {
+                // console.log(`MangaDex: Link: ${this.url}/manga/${id}/feed?limit=500&includes[]=scanlation_group&includes[]=user&order[volume]=desc&order[chapter]=desc&offset=${offset}&${this.getContentRatingParams()}`);
                 const resp = await fetch(
-                    `${this.url}/manga/${id}/feed?limit=500&translatedLanguage[]=en&includes[]=scanlation_group&includes[]=user&order[volume]=desc&order[chapter]=desc&offset=${500 * page}&${this.getContentRatingParams()}`,
+                    `${this.url}/manga/${id}/feed?limit=500&includes[]=scanlation_group&includes[]=user&order[volume]=desc&order[chapter]=desc&offset=${offset}&${this.getContentRatingParams()}`,
                     {
                         headers: this.headers,
                     },
@@ -178,41 +192,38 @@ class Provider {
                     );
                 }
 
-                data.data.reverse();
-
-                const chapterMap: Record<string, ChapterDetails> = {};
-                let idx = ret.length;
+                if (data.data.length === 0) break;
 
                 for (let chapter of data.data) {
-                    if (chapter.attributes.chapter == "") continue;
+                    if (
+                        chapter.attributes.chapter == "" ||
+                        (chapter.attributes.externalUrl && (chapter.attributes.pages === 0 || chapter.attributes.pages === 1))
+                    ) continue;
 
                     const title = `Chapter ${chapter.attributes.chapter} `;
+                    const scanlationGroup = chapter.relationships?.find(
+                        (relationship) => relationship.type === "scanlation_group",
+                    );
 
-                    if (chapter.attributes.chapter in chapterMap) continue;
-
-                    chapterMap[chapter.attributes.chapter] = {
+                    ret.push({
                         id: chapter.id,
                         url: "",
                         title: title,
-                        index: idx,
+                        index: ret.length,
                         chapter: chapter.attributes.chapter,
+                        language: this.normalizeLanguageCode(
+                            chapter.attributes.translatedLanguage,
+                        ),
+                        scanlator: scanlationGroup?.attributes?.name,
                         updatedAt: chapter.attributes.updatedAt,
-                    };
-
-                    idx++;
+                    });
                 }
-
-                const chapters: ChapterDetails[] = [];
-
-                for (let chapter of Object.values(chapterMap)) {
-                    chapters.push(chapter);
-                }
-
-                chapters.sort((a, b) => a.index - b.index);
-
-                if (chapters.length > 0) ret.push(...chapters);
-                else break;
             }
+
+            ret.reverse();
+            ret.forEach((chapter, index) => {
+                chapter.index = index;
+            });
 
             console.log(`MangaDex: Found ${ret.length} chapters`);
             return ret;
@@ -221,6 +232,10 @@ class Provider {
             console.error("MangaDex: Error finding chapters: " + e.message);
             throw e;
         }
+    }
+
+    private normalizeLanguageCode(lang: string): string {
+        return lang === "es-la" ? "es-419" : lang;
     }
 
     async findChapterPages(id: string): Promise<ChapterPage[]> {
