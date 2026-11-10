@@ -1,7 +1,7 @@
 {
     "id": "mangadex",
     "name": "MangaDex",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "language": "typescript",
     "type": "manga-provider",
     "description": "Integrates MangaDex as a manga provider for Seanime.",
@@ -9,7 +9,7 @@
     "icon": "https://raw.githubusercontent.com/faddix/seanime-mangadex/main/src/mangadex-logo.png",
     "lang": "multi",
     "userConfig": {
-        "version": 2,
+        "version": 3,
         "requiresConfig": false,
         "fields": [
             {
@@ -23,6 +23,58 @@
                 "name": "includeAdultContent",
                 "label": "Include adult content",
                 "default": "true"
+            },
+            {
+                "type": "select",
+                "name": "chapterLanguage",
+                "label": "Chapter language",
+                "default": "all",
+                "options": [
+                    {
+                        "value": "all",
+                        "label": "All languages"
+                    },
+                    {
+                        "value": "en",
+                        "label": "English"
+                    },
+                    {
+                        "value": "es",
+                        "label": "Spanish"
+                    },
+                    {
+                        "value": "es-la",
+                        "label": "Spanish (Latin America)"
+                    },
+                    {
+                        "value": "pt-br",
+                        "label": "Portuguese (Brazil)"
+                    },
+                    {
+                        "value": "fr",
+                        "label": "French"
+                    },
+                    {
+                        "value": "de",
+                        "label": "German"
+                    },
+                    {
+                        "value": "it",
+                        "label": "Italian"
+                    },
+                    {
+                        "value": "ja",
+                        "label": "Japanese"
+                    },
+                    {
+                        "value": "ko",
+                        "label": "Korean"
+                    },
+                    {
+                        "value": "zh",
+                        "label": "Chinese"
+                    }
+                ]
             }
         ]
     },

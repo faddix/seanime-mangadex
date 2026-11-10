@@ -82,6 +82,15 @@ class Provider {
             .join("&");
     }
 
+    private getLanguageParams(): string {
+        const language = $getUserPreference("chapterLanguage") || "all";
+
+        if (language === "all")
+            return "";
+
+        return `translatedLanguage[]=${encodeURIComponent(language)}`;
+    }
+
     async search(opts: QueryOptions): Promise<SearchResult[]> {
         try {
             const ret: SearchResult[] = [];
@@ -167,8 +176,9 @@ class Provider {
 
             for (let offset = 0; ; offset += 500) {
                 // console.log(`MangaDex: Link: ${this.url}/manga/${id}/feed?limit=500&includes[]=scanlation_group&includes[]=user&order[volume]=desc&order[chapter]=desc&offset=${offset}&${this.getContentRatingParams()}`);
+                const languageParams = this.getLanguageParams();
                 const resp = await fetch(
-                    `${this.url}/manga/${id}/feed?limit=500&includes[]=scanlation_group&includes[]=user&order[volume]=desc&order[chapter]=desc&offset=${offset}&${this.getContentRatingParams()}`,
+                    `${this.url}/manga/${id}/feed?limit=500&includes[]=scanlation_group&includes[]=user&order[volume]=desc&order[chapter]=desc&offset=${offset}&${this.getContentRatingParams()}${languageParams ? `&${languageParams}` : ""}`,
                     {
                         headers: this.headers,
                     },
